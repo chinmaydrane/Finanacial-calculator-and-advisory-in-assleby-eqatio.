@@ -1,10 +1,2 @@
-Low-level memory manipulation
-
-Direct hardware access (if applicable)
-
-Menu-driven interface using interrupts
-
- Technologies Used
-Language: 8086
-Platform: ubuntu terminal
-
+Assembly language code that calculates your various taxes based on the input you provide.
+It uses a simple switch-case-like structure.
