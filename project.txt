@@ -1,0 +1,608 @@
+section .data
+menu db "Choose an option:", 0xA
+     db "1) Calculate Simple Interest", 0xA
+     db "2) Calculate Compound Interest", 0xA
+     db "3) Calculate Income Tax", 0xA
+     db "4) Calculate EMI", 0xA
+     db "5) Calculate House Tax", 0xA
+     db "Enter your choice: ", 0
+menu_len equ $ - menu
+
+input_buffer db 20 dup(0)    ; Buffer to store user input
+
+prompt_principal db "Enter Principal Amount: ", 0
+prompt_rate db "Enter Rate of Interest (in %): ", 0
+prompt_time db "Enter Time (in years): ", 0
+interest_msg db "Calculated interest is: ", 0
+
+prompt_income db "Enter your taxable income: ", 0
+prompt_tax_msg db "Calculated tax is ",0
+prompt_salary db "Enter your in-hand salary (per month): ", 0
+prompt_loan_amount db "Enter the loan amount you want from the bank: ", 0
+max_emi_msg db "You can repay at an EMI of: ", 0
+as_emi_msg db " as EMI", 0xA, 0
+
+cant_take_loan_msg db "You can't take the loan: ", 0
+max_loan_msg db "The maximum amount of loan you can take is: ", 0
+possible_loan_msg db "You will be able to repay your loan within: ", 0
+years_msg db " years", 0xA, 0
+at_emi_msg db " at an EMI of: ", 0
+and_interest_msg db " and interest rate 10%", 0xA, 0
+
+Carpet_area_msg db "Enter the carpet area in sq meters: ", 0
+UAV_msg db "Enter Unit Area Value: ", 0
+Const_year_msg db "Enter construction year: ", 0
+rented_msg db "Select 1 for self-occupied, 2 for rented: ", 0
+rebate_msg db "Enter the amount of rebate: ", 0
+home_tax db "Calculated tax is: ", 0
+wrong_choice_msg db "Invalid choice. Program exited.", 0
+
+newline db 0xA, 0
+
+section .bss
+    principal resq 1
+    rate resq 1
+    time resq 1
+    income resq 1
+    salary resq 1
+    loan_amount resq 1
+    max_emi resq 1
+    yearly_emi_total resq 1
+    max_loan resq 1
+    repayment_time resq 1
+    simple_interest resq 1
+    compound_interest resq 1
+    num resq 1
+    den resq 1
+    tax resq 1
+    result resq 1
+    carpet_area resq 1
+    uav resq 1
+    const_year resq 1
+    rebate resq 1
+    choice resq 1
+    price resq 1
+    age_factor resq 1
+    use_factor resq 1
+    final_tax resq 1
+
+section .text
+    global _start
+
+_start:
+    ; Display menu
+    mov rax, 1              ; sys_write
+    mov rdi, 1              ; stdout
+    mov rsi, menu           ; address of the menu
+    mov rdx, menu_len       ; length of the menu
+    syscall
+
+    ; Read user choice
+    mov rax, 0              ; sys_read
+    mov rdi, 0              ; stdin
+    mov rsi, input_buffer   ; address of input buffer
+    mov rdx, 2              ; length to read
+    syscall
+
+    ; Check user choice
+    mov al, [input_buffer]
+    cmp al, '1'
+    je simple_interest_case
+    cmp al, '2'
+    je compound_interest_case
+    cmp al, '3'
+    je income_tax_case
+    cmp al, '4'
+    je emi_case
+    cmp al, '5'
+    je property_tax_case
+
+    jmp wrong_choice
+
+wrong_choice:
+    mov rsi, wrong_choice_msg
+    call print_string
+    jmp exit_program
+simple_interest_case:
+    ; Input Principal
+    mov rsi, prompt_principal
+    call print_string
+    call get_integer_input
+    mov [principal], rax
+
+    ; Input Rate
+    mov rsi, prompt_rate
+    call print_string
+    call get_integer_input
+    mov [rate], rax
+
+    ; Input Time
+    mov rsi, prompt_time
+    call print_string
+    call get_integer_input
+    mov [time], rax
+
+    ; Simple Interest Calculation: SI = (P * R * T) / 100
+    mov rax, [principal]      ; Load principal into rax
+    imul rax, [rate]           ; rax = rax * rate
+    imul rax, [time]           ; rax = rax * time
+    mov rbx, 100
+    cqo                        ; Sign-extend rax into rdx:rax for division
+    idiv rbx                   ; rax = rax / 100, rdx = rax % 100
+    mov [simple_interest], rax ; Store the result
+
+    ; Display Result
+    mov rsi, interest_msg
+    call print_string
+    mov rax, [simple_interest] ; Correctly move the result into rax
+    call print_integer          ; Now print_integer receives the correct value
+    jmp exit_program
+compound_interest_case:
+    ; Input Principal
+    mov rsi, prompt_principal
+    call print_string
+    call get_integer_input
+    mov [principal], rax            ; Store the principal amount
+
+    ; Input Rate
+    mov rsi, prompt_rate
+    call print_string
+    call get_integer_input
+    mov [rate], rax                 ; Store the rate
+
+    ; Input Time
+    mov rsi, prompt_time
+    call print_string
+    call get_integer_input
+    mov [time], rax                 ; Store the time
+
+    ; Ensure that time is not zero or negative
+    cmp rax, 0
+    jle invalid_time_case           ; Jump if time is invalid
+
+    ; Compound Interest Calculation:
+    ; 1 + R/100 = (100 + rate) / 100
+    mov rax, [rate]                 ; Load rate into rax
+    add rax, 100                    ; rax = 100 + rate
+    mov rbx, 100                    ; rbx = 100 (divisor)
+
+    ; Save this factor (1 + R/100)
+    push rax                        ; Save the factor for later use
+
+    ; Initialize rax with the principal
+    mov rax, [principal]            ; rax = principal
+
+    ; Save the principal for later subtraction
+    mov rdx, rax                    ; rdx = principal (saved)
+
+    ; Load time (years) into rcx
+    mov rcx, [time]                 ; rcx = time (years)
+
+calc_compound_interest:
+    ; Multiply by the factor (1 + R/100)
+    pop rbx                         ; Retrieve (1 + R/100)
+    imul rax, rbx                   ; Multiply principal by the factor
+    push rbx                        ; Save the factor again for the next iteration
+
+    ; Divide by 100 (scaling)
+    mov rbx, 100                    ; Set divisor 100 in rbx
+    xor rdx, rdx                    ; Clear rdx (for division)
+    idiv rbx                        ; Divide rax by 100
+
+    ; Decrement time and repeat if time > 0
+    dec rcx
+    jnz calc_compound_interest      ; Continue until rcx reaches 0
+
+    ; Subtract original principal to get compound interest
+    sub rax, [principal]            ; rax = rax - principal
+
+    ; Store the result in compound_interest
+    mov [compound_interest], rax    ; Save compound interest
+
+    ; Display the result
+    mov rsi, interest_msg
+    call print_string
+    mov rax, [compound_interest]    ; Load the compound interest
+    call print_integer              ; Print compound interest
+    jmp exit_program
+
+invalid_time_case:
+    mov rsi, newline
+    call print_string
+    mov rsi, wrong_choice_msg       ; Display error message for invalid time
+    call print_string
+    jmp exit_program
+
+income_tax_case:
+    ; Input Taxable Income
+    mov rsi, prompt_income
+    call print_string
+    call get_integer_input            ; Get income from user
+    mov rbx, rax                      ; Move the input income into rbx for calculation
+
+    ; Initialize tax to 0
+    xor rdx, rdx                      ; Clear rdx register (set to 0)
+    mov [tax], rdx                    ; Store 0 in tax
+
+    ; Tax Slab Calculations
+
+    ; If income <= 300000: No Tax
+    cmp rbx, 300000
+    jle no_tax_case
+
+    ; If income > 300000 and <= 600000: 
+    cmp rbx, 600000
+    jle tax_slab_5_percent
+
+    ; If income > 600000 and <= 900000:
+    cmp rbx, 900000
+    jle tax_slab_10_percent
+
+    ;If income >900000 and <=1200000
+     cmp rbx ,1200000
+     jle tax_slab_15_percent 
+
+    ; If income > 1200000 and <=1500000
+    cmp rbx,1500000
+    jmp tax_slab_20_percent
+    
+jmp tax_slab_30_percent
+no_tax_case:
+    ; No tax scenario, print the message and exit
+    mov rax,0
+    call print_integer
+    jmp exit_program
+
+tax_slab_5_percent:
+    ; Calculate 5% tax on the amount exceeding 250000
+    sub rbx, 300000                   ; rbx = income - 250000
+    mov rax, rbx                      ; rax = taxable amount
+    mov rcx, 5                        ; rcx = 5% tax
+    imul rax, rcx                     ; rax = taxable amount * 5
+    mov rcx, 100                      ; rcx = 100 (percentage divisor)
+    idiv rcx                          ; rax = tax (amount * 5 / 100)
+    mov [tax], rax                    ; Store calculated tax
+    jmp display_tax
+
+tax_slab_10_percent:
+    ; Calculate 10% tax on the amount exceeding 500000
+    sub rbx, 600000                   ; rbx = income - 500000
+    mov rax, rbx                      ; rax = taxable amount
+    mov rcx, 10                       ; rcx = 10% tax
+    imul rax, rcx                     ; rax = taxable amount * 10
+    mov rcx, 100                      ; rcx = 100 (percentage divisor)
+    idiv rcx                          ; rax = tax (amount * 10 / 100)
+    mov [tax], rax                    ; Store calculated tax
+
+    ; Add 15000
+    add qword [tax], 15000            ; tax = tax + 15000
+    jmp display_tax
+
+tax_slab_15_percent:
+    ; Calculate 15% tax on the amount exceeding 900000
+    sub rbx, 900000                   ; rbx = income - 250000
+    mov rax, rbx                      ; rax = taxable amount
+    mov rcx, 15                        ; rcx = 5% tax
+    imul rax, rcx                     ; rax = taxable amount * 15
+    mov rcx, 100                      ; rcx = 100 (percentage divisor)
+    idiv rcx                          ; rax = tax (amount * 15 / 100)
+    mov [tax], rax                    ; Store calculated tax
+    add qword [tax], 45000
+    jmp display_tax
+     
+
+tax_slab_20_percent:
+    ; Calculate 20% tax on the amount exceeding 1000000
+    sub rbx, 1200000                  ; rbx = income - 1000000
+    mov rax, rbx                      ; rax = taxable amount
+    mov rcx, 20                       ; rcx = 20% tax
+    imul rax, rcx                     ; rax = taxable amount * 20
+    mov rcx, 100                      ; rcx = 100 (percentage divisor)
+    idiv rcx                          ; rax = tax (amount * 20 / 100)
+    mov [tax], rax                    ; Store calculated tax
+
+   
+
+    ; Add 5% tax on the first 250000 (which is 12500)
+    add qword [tax], 90000            ; tax = tax + 12500
+    jmp display_tax
+tax_slab_30_percent:
+    ; Calculate 5% tax on the amount exceeding 250000
+    sub rbx, 1500000                   ; rbx = income - 250000
+    mov rax, rbx                      ; rax = taxable amount
+    mov rcx, 30                        ; rcx = 5% tax
+    imul rax, rcx                     ; rax = taxable amount * 5
+    mov rcx, 100                      ; rcx = 100 (percentage divisor)
+    idiv rcx                          ; rax = tax (amount * 5 / 100)
+    mov [tax], rax                    ; Store calculated tax
+    add qword [tax],150000
+    jmp display_tax
+
+display_tax:
+    ; Display the calculated tax
+    mov rsi, prompt_tax_msg
+    call print_string
+    mov rax, [tax]                    ; Load the calculated tax
+    call print_integer                ; Print the tax amount
+    jmp exit_program
+emi_case:
+    ; Input monthly salary
+    mov rsi, prompt_salary
+    call print_string
+    call get_integer_input
+    mov [salary], rax           ; Store the input salary
+
+    ; Calculate total salary over 15 years
+    mov rax, [salary]           ; Load monthly salary into rax
+    imul rax, 12                ; Calculate annual salary (monthly * 12)
+    imul rax, 15                ; Calculate salary over 15 years
+    mov [yearly_emi_total], rax ; Store total salary over 15 years
+
+    ; Input loan amount
+    mov rsi, prompt_loan_amount
+    call print_string
+    call get_integer_input
+    mov [loan_amount], rax      ; Store the loan amount
+
+    ; Calculate total repayment over 15 years at 10% interest
+    mov rax, [loan_amount]      ; Load loan amount into rax
+    mov rcx, 10                 ; Interest rate (10%)
+    imul rax, rcx               ; Total interest = loan amount * 10%
+    imul rax, 15                ; Interest for 15 years
+    xor rdx, rdx                ; Clear rdx for division
+    mov rbx, 100                ; Set divisor to 100
+    idiv rbx                    ; rax = interest / 100
+
+    ; Add interest to loan amount for total repayment
+    add rax, [loan_amount]      ; Total repayment = loan amount + interest
+    mov [result], rax           ; Store the total repayment
+
+    ; Calculate total EMI (monthly payment)
+    mov rbx, 180                ; Total months (15 years)
+    mov rax, [result]           ; Load total repayment into rax
+    xor rdx, rdx                ; Clear rdx for division
+    idiv rbx                    ; EMI = total repayment / total months
+    mov [max_emi], rax          ; Store EMI amount
+
+    ; Check if EMI is within 40% of monthly salary
+    mov rax, [salary]           ; Load monthly salary
+    mov rcx, 40                 ; 40% of salary
+    imul rax, rcx               ; rax = monthly salary * 40
+    xor rdx, rdx                ; Clear rdx for division
+    mov rcx, 100                ; Set divisor to 100
+    idiv rcx                    ; rax = 40% of monthly salary
+    mov rbx, rax                ; Store 40% of salary in rbx
+
+    ; Compare EMI with 40% of salary
+    mov rax, [max_emi]          ; Load calculated EMI
+    cmp rax, rbx                ; Compare EMI with 40% of salary
+    jg cant_pay_emi             ; Jump if EMI is greater than 40% of salary
+
+can_pay_emi:
+    ; Display can pay EMI message
+    mov rsi, max_emi_msg        ; Set message
+    call print_string
+    mov rax, [max_emi]          ; Load EMI amount
+    call print_integer          ; Print EMI amount
+    jmp exit_program
+
+cant_pay_emi:
+    ; Display cannot pay EMI message
+    mov rsi, cant_take_loan_msg
+    call print_string
+    jmp exit_program
+
+property_tax_case:
+    ; Input carpet area
+    mov rsi, Carpet_area_msg
+    call print_string
+    call get_integer_input
+    mov [carpet_area], rax              ; Store carpet area
+
+    ; Input UAV (Unit Area Value)
+    mov rsi, UAV_msg
+    call print_string
+    call get_integer_input
+    mov [uav], rax                      ; Store UAV
+
+    ; Check if carpet_area or uav is zero and exit if true
+    mov rax, [carpet_area]
+    cmp rax, 0
+    je exit_program                     ; Exit if carpet_area is zero
+
+    mov rax, [uav]
+    cmp rax, 0
+    je exit_program                     ; Exit if UAV is zero
+
+    ; Input construction year
+    mov rsi, Const_year_msg
+    call print_string
+    call get_integer_input
+    mov [const_year], rax               ; Store construction year
+
+    ; Determine age factor based on the construction year
+    mov rax, [const_year]               ; Load construction year
+    cmp rax, 1960
+    jl set_age_factor_05                ; Before 1960 => 0.5
+    cmp rax, 1970
+    jl set_age_factor_06                ; 1960-1969 => 0.6
+    cmp rax, 1980
+    jl set_age_factor_07                ; 1970-1979 => 0.7
+    cmp rax, 1990
+    jl set_age_factor_08                ; 1980-1989 => 0.8
+    cmp rax, 2000
+    jl set_age_factor_09                ; 1990-1999 => 0.9
+    jmp set_age_factor_10               ; 2000 onwards => 1.0
+
+set_age_factor_05:
+    mov rax, 5                          ; 0.5 factor (multiply by 5, divide by 10)
+    jmp store_age_factor
+
+set_age_factor_06:
+    mov rax, 6                          ; 0.6 factor (multiply by 6, divide by 10)
+    jmp store_age_factor
+
+set_age_factor_07:
+    mov rax, 7                          ; 0.7 factor (multiply by 7, divide by 10)
+    jmp store_age_factor
+
+set_age_factor_08:
+    mov rax, 8                          ; 0.8 factor (multiply by 8, divide by 10)
+    jmp store_age_factor
+
+set_age_factor_09:
+    mov rax, 9                          ; 0.9 factor (multiply by 9, divide by 10)
+    jmp store_age_factor
+
+set_age_factor_10:
+    mov rax, 10                         ; 1.0 factor (multiply by 10, divide by 10)
+    jmp store_age_factor
+
+store_age_factor:
+    mov [age_factor], rax               ; Store the age factor
+
+    ; Select occupancy type (self-occupied or rented)
+    mov rsi, rented_msg
+    call print_string
+    call get_integer_input
+    cmp rax, 1
+    je self_occupied
+    cmp rax, 2
+    je rented
+    jmp wrong_choice
+
+self_occupied:
+    mov rax, 1                          ; Use factor 1 for self-occupied
+    mov [use_factor], rax
+    jmp continue_tax_calc
+
+rented:
+    mov rax, 2                          ; Use factor 2 for rented property
+    mov [use_factor], rax
+    jmp continue_tax_calc
+
+continue_tax_calc:
+    ; Input rebate
+    mov rsi, rebate_msg
+    call print_string
+    call get_integer_input
+    mov [rebate], rax                   ; Store rebate
+
+    ; Calculate property tax
+    ; Tax = carpet_area * UAV * (age_factor / 10) * use_factor - rebate
+    mov rax, [carpet_area]              ; Load carpet area
+    imul rax, [uav]                     ; rax = carpet_area * UAV
+    imul rax, [age_factor]              ; rax = rax * age_factor
+
+    ; Clear rdx before division to avoid overflow
+    xor rdx, rdx                        ; Clear upper part of dividend (rdx)
+    mov rbx, 10
+    idiv rbx                            ; Divide by 10 for the age factor
+
+    imul rax, [use_factor]              ; rax = rax * use_factor
+    sub rax, [rebate]                   ; Subtract rebate
+    mov [final_tax], rax                ; Store final tax
+
+    ; Display the calculated property tax
+    mov rsi, home_tax
+    call print_string
+    mov rax, [final_tax]                ; Load final tax
+    call print_integer                  ; Print the final tax
+    jmp exit_program
+
+
+
+exit_program:
+    mov rax, 60             ; sys_exit
+    xor rdi, rdi            ; status 0
+    syscall
+
+; Helper Functions
+
+get_integer_input:
+    mov rax, 0              ; sys_read
+    mov rdi, 0              ; stdin
+    mov rsi, input_buffer   ; address of input buffer
+    mov rdx, 20             ; length to read
+    syscall
+    xor rax, rax            ; Clear RAX (the number)
+    xor rcx, rcx            ; Clear RCX (for character conversion)
+    
+    ; Check if input is empty
+    cmp byte [input_buffer], 0
+    je .done_conversion
+
+.convert_loop:
+    movzx rcx, byte [rsi]   ; Load byte from buffer
+    cmp rcx, 0xA            ; Check for newline
+    je .done_conversion
+    cmp rcx, '0'            ; Check for valid digit
+    jb .done_conversion       ; If less than '0', break
+    cmp rcx, '9'            ; Check for valid digit
+    ja .done_conversion       ; If more than '9', break
+    sub rcx, '0'            ; Convert ASCII to integer
+    imul rax, rax, 10       ; Multiply previous number by 10
+    add rax, rcx            ; Add current digit
+    inc rsi                 ; Move to the next character
+    jmp .convert_loop
+    
+.done_conversion:
+    ret
+
+print_string:
+    mov rax, 1              ; sys_write
+    mov rdi, 1              ; stdout
+    mov rdx, 0              ; initialize length
+    push rsi                ; save rsi
+.count_loop:
+    cmp byte [rsi], 0
+    je .done_count
+    inc rsi
+    inc rdx
+    jmp .count_loop
+.done_count:
+    pop rsi
+    syscall
+    ret
+print_integer:
+    ; Print integer in RAX
+    ; Converts the integer to string and uses sys_write
+    push rbx
+    push rcx
+    push rdx
+    mov rcx, 10
+    xor rbx, rbx            ; Digit count
+
+.push_digits:
+    xor rdx, rdx            ; Clear RDX for division
+    div rcx                  ; Divide RAX by 10
+    push rdx                ; Push remainder (digit)
+    inc rbx                 ; Increment digit count
+    test rax, rax
+    jnz .push_digits
+
+    ; Now print in reverse order
+.pop_and_print:
+    pop rdx                  ; Get digit
+    add dl, '0'              ; Convert to ASCII
+    mov [input_buffer], dl   ; Write digit to buffer
+    mov rax, 1               ; sys_write
+    mov rdi, 1               ; stdout
+    lea rsi, [input_buffer]   ; Address of the single character
+    mov rdx, 1               ; Size of character
+    syscall
+    dec rbx                  ; Decrement digit count
+    jnz .pop_and_print       ; Repeat for all digits
+
+    ; Print newline after integer
+    mov byte [input_buffer], 10  ; New line character
+    mov rax, 1               ; sys_write
+    mov rdi, 1               ; stdout
+    lea rsi, [input_buffer]   ; Address of the newline
+    mov rdx, 1               ; Size of newline
+    syscall
+
+    pop rdx
+    pop rcx
+    pop rbx
+    ret 
